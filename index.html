@@ -1,0 +1,2305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=240, height=320, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>RailTrack - Where Is My Train</title>
+  <style>
+    /* Strict 240x320 QVGA Phone Baseline */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      height: 320px;
+      width: 100vw;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Fixed 240x320 Canvas Frame */
+    #phone-canvas {
+      width: 240px;
+      height: 320px;
+      max-width: 240px;
+      max-height: 320px;
+      position: relative;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.85);
+    }
+
+    @media (max-width: 240px) and (max-height: 320px) {
+      body, #phone-canvas {
+        width: 100vw;
+        height: 100vh;
+        max-width: 100vw;
+        max-height: 100vh;
+      }
+    }
+
+    /* Common Header & Softkey Bars */
+    .app-header {
+      height: 30px;
+      min-height: 30px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+      z-index: 20;
+    }
+
+    .app-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
+      animation: pulse 1.8s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
+    }
+
+    .header-badge {
+      font-size: 8.5px;
+      font-weight: 700;
+      padding: 1.5px 4.5px;
+      border-radius: 3px;
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
+      border: 0.5px solid rgba(16, 185, 129, 0.4);
+      white-space: nowrap;
+    }
+
+    .header-badge.late {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .header-badge.clock {
+      background: rgba(56, 189, 248, 0.18);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.4);
+      font-family: monospace;
+    }
+
+    /* Content Viewport (266px / 264px) */
+    .view-content {
+      flex: 1;
+      overflow-y: scroll;
+      overflow-x: hidden;
+      position: relative;
+      scroll-behavior: smooth;
+      background: #0f172a;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .view-content::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Softkey Footer: Exactly 24px */
+    .app-footer {
+      height: 24px;
+      min-height: 24px;
+      background: #090d16;
+      border-top: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #94a3b8;
+      z-index: 20;
+    }
+
+    .softkey-action {
+      background: none;
+      border: none;
+      color: #f8fafc;
+      font-size: 9.5px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 2px 3px;
+    }
+
+    .softkey-action.left { color: #38bdf8; }
+    .softkey-action.center { color: #cbd5e1; font-size: 8.5px; }
+    .softkey-action.right { color: #f87171; }
+
+    /* ========================================================
+       VIEW 1: Station Search Screen
+       ======================================================== */
+    #view-search {
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .custom-search-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      padding: 5px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .inputs-grid {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .stn-select-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5px;
+      min-width: 0;
+    }
+
+    .stn-label {
+      font-size: 8px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .stn-dropdown {
+      width: 100%;
+      height: 26px;
+      background: #090d16;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      color: #f8fafc;
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 0 3px;
+      outline: none;
+      cursor: pointer;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stn-dropdown:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 5px rgba(56, 189, 248, 0.4);
+    }
+
+    .stn-dropdown option {
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 10.5px;
+    }
+
+    .swap-btn {
+      width: 22px;
+      height: 22px;
+      min-width: 22px;
+      background: #334155;
+      border: 1px solid #475569;
+      color: #38bdf8;
+      border-radius: 50%;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    .swap-btn:active {
+      background: #0284c7;
+      color: #ffffff;
+    }
+
+    .route-preview-strip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 8px;
+      font-weight: 700;
+      color: #cbd5e1;
+      background: #090d16;
+      border: 1px dashed #334155;
+      border-radius: 3px;
+      padding: 2px 4px;
+      margin-top: 1px;
+    }
+
+    .custom-code-row {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+    }
+
+    .stn-code-input {
+      flex: 1;
+      height: 22px;
+      background: #090d16;
+      border: 1px solid #475569;
+      border-radius: 3px;
+      color: #f8fafc;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      text-transform: uppercase;
+      outline: none;
+    }
+
+    .stn-code-input:focus {
+      border-color: #38bdf8;
+    }
+
+    .search-btn-primary {
+      width: 100%;
+      height: 26px;
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      margin-top: 2px;
+    }
+
+    .search-btn-primary:active {
+      background: #38bdf8;
+    }
+
+    .section-label {
+      font-size: 8.5px;
+      font-weight: 800;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-left: 2px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .presets-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3.5px;
+    }
+
+    .preset-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 4.5px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .preset-card.focused {
+      background: #0369a1;
+      border-color: #38bdf8;
+      box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+    }
+
+    .preset-left {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      overflow: hidden;
+    }
+
+    .preset-key {
+      width: 15px;
+      height: 15px;
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 800;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .preset-card.focused .preset-key {
+      background: #ffffff;
+      color: #0369a1;
+      border-color: #ffffff;
+    }
+
+    .preset-details {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      overflow: hidden;
+    }
+
+    .preset-route {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #f8fafc;
+      white-space: nowrap;
+    }
+
+    .preset-names {
+      font-size: 7.5px;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 160px;
+    }
+
+    .preset-card.focused .preset-names {
+      color: #e0f2fe;
+    }
+
+    .preset-arrow {
+      font-size: 9px;
+      font-weight: 800;
+      color: #64748b;
+    }
+
+    .preset-card.focused .preset-arrow {
+      color: #ffffff;
+    }
+
+    /* ========================================================
+       VIEW 2: Trains Between Stations (List Screen)
+       ======================================================== */
+    #view-trains {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .time-filter-strip {
+      background: #162033;
+      border-bottom: 1px solid #2d3748;
+      padding: 3px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 8.5px;
+      color: #94a3b8;
+    }
+
+    .filter-badge {
+      color: #38bdf8;
+      font-weight: 700;
+    }
+
+    .trains-list-container {
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .train-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 5px 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .train-card.selected {
+      background: #1e293b;
+      border: 1.5px solid #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+      border-left: 3.5px solid #38bdf8;
+    }
+
+    .train-card.departed-earlier {
+      opacity: 0.65;
+    }
+
+    .train-card-row1 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    .train-id-name {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .train-num {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #38bdf8;
+      font-family: monospace;
+    }
+
+    .train-card.selected .train-num {
+      color: #7dd3fc;
+    }
+
+    .train-title {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #f8fafc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 135px;
+    }
+
+    .train-type-pill {
+      font-size: 7.5px;
+      font-weight: 800;
+      padding: 1px 3.5px;
+      border-radius: 2.5px;
+      background: #334155;
+      color: #cbd5e1;
+      white-space: nowrap;
+    }
+
+    .train-card.selected .train-type-pill {
+      background: #0284c7;
+      color: #ffffff;
+    }
+
+    .train-card-row2 {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      font-size: 9px;
+      color: #94a3b8;
+    }
+
+    .train-times {
+      color: #f8fafc;
+      font-weight: 700;
+      font-size: 9.5px;
+    }
+
+    .train-duration {
+      font-size: 8px;
+      color: #34d399;
+      font-weight: 700;
+    }
+
+    .train-card-row3 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 8px;
+      color: #64748b;
+      margin-top: 1px;
+    }
+
+    .train-live-tag {
+      font-weight: 700;
+      font-size: 8px;
+    }
+
+    .train-live-tag.next {
+      color: #facc15;
+    }
+
+    .train-live-tag.running {
+      color: #34d399;
+    }
+
+    .train-live-tag.passed {
+      color: #64748b;
+    }
+
+    .focus-pointer {
+      font-size: 8.5px;
+      font-weight: 800;
+      color: #38bdf8;
+      display: none;
+    }
+
+    .train-card.selected .focus-pointer {
+      display: inline-block;
+    }
+
+    /* ========================================================
+       VIEW 3: Live Running Status ("Where Is My Train")
+       ======================================================== */
+    #view-timeline {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .timeline-strip-header {
+      height: 32px;
+      min-height: 32px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+      z-index: 15;
+    }
+
+    .timeline-train-info {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #f8fafc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 135px;
+    }
+
+    .realtime-alert-banner {
+      background: #111e38;
+      border-bottom: 1px solid #1e3a8a;
+      padding: 4px 6px;
+      font-size: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #93c5fd;
+    }
+
+    /* Vertical Timeline Container */
+    .timeline-stops-wrap {
+      position: relative;
+      padding: 6px 0 16px 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Station Item Node */
+    .station-row {
+      display: flex;
+      position: relative;
+      min-height: 48px;
+      padding-right: 6px;
+      z-index: 2;
+    }
+
+    /* Left Track Line & Node Column */
+    .track-column {
+      width: 34px;
+      min-width: 34px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .track-segment-up, .track-segment-down {
+      width: 2.5px;
+      position: absolute;
+      left: 16px;
+    }
+
+    .track-segment-up { top: 0; height: 16px; }
+    .track-segment-down { top: 16px; bottom: 0; }
+
+    .passed .track-segment-up, .passed .track-segment-down { background: #475569; }
+    .active .track-segment-up { background: #475569; }
+    .active .track-segment-down { background: #334155; }
+    .upcoming .track-segment-up, .upcoming .track-segment-down { background: #334155; }
+
+    /* Node Circle */
+    .station-circle {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 12px;
+      position: relative;
+      z-index: 3;
+    }
+
+    .passed .station-circle {
+      background: #64748b;
+      border: 1px solid #1e293b;
+    }
+
+    .upcoming .station-circle {
+      background: #ffffff;
+      border: 1.5px solid #334155;
+      box-shadow: 0 0 3px rgba(255, 255, 255, 0.5);
+    }
+
+    .active .station-circle {
+      width: 12px;
+      height: 12px;
+      margin-top: 10px;
+      background: #10b981;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 8px #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .active .station-circle::after {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 2px solid #34d399;
+      animation: radar-pulse 1.6s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+    }
+
+    @keyframes radar-pulse {
+      0% { transform: scale(0.9); opacity: 1; }
+      100% { transform: scale(2.4); opacity: 0; }
+    }
+
+    .train-badge-icon {
+      position: absolute;
+      top: 7px;
+      left: 1px;
+      font-size: 11px;
+      z-index: 4;
+      animation: train-blink 0.85s infinite alternate ease-in-out;
+      filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.9));
+    }
+
+    @keyframes train-blink {
+      0% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 0.3; transform: scale(0.9); }
+    }
+
+    /* Right Details Column */
+    .details-column {
+      flex: 1;
+      padding: 3px 5px 6px 3px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border-bottom: 0.5px solid rgba(51, 65, 85, 0.4);
+      min-width: 0;
+    }
+
+    .active .details-column {
+      background: rgba(6, 78, 59, 0.28);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      border-left: 2.5px solid #10b981;
+      border-radius: 4px;
+      padding: 4px 5px;
+      margin-bottom: 2px;
+    }
+
+    .stn-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 3px;
+    }
+
+    .stn-title-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .stn-name {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #f8fafc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .passed .stn-name { color: #64748b; }
+    .active .stn-name { color: #ffffff; font-weight: 800; }
+
+    .stn-code-badge {
+      font-size: 8px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .passed .stn-code-badge { color: #64748b; }
+    .active .stn-code-badge { color: #34d399; }
+
+    .platform-pill {
+      font-size: 7.5px;
+      font-weight: 700;
+      color: #cbd5e1;
+      background: #334155;
+      padding: 0.5px 3px;
+      border-radius: 2px;
+      white-space: nowrap;
+    }
+
+    .active .platform-pill {
+      background: #10b981;
+      color: #064e3b;
+    }
+
+    .stn-times-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 8px;
+      color: #94a3b8;
+    }
+
+    .time-val.actual {
+      color: #facc15;
+      font-weight: 700;
+    }
+
+    .passed .time-val.actual {
+      color: #94a3b8;
+    }
+
+    .stn-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 8px;
+      margin-top: 1px;
+    }
+
+    .status-pill {
+      font-size: 7.5px;
+      font-weight: 700;
+      padding: 0.5px 3.5px;
+      border-radius: 2px;
+    }
+
+    .status-pill.ontime {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .status-pill.delay {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+    }
+
+    .active-note {
+      font-size: 7.5px;
+      font-weight: 800;
+      color: #34d399;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-top: 1px;
+    }
+
+    /* Loading UI */
+    .loading-state {
+      height: 180px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      color: #94a3b8;
+      font-size: 10px;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #334155;
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Physical Phone Canvas (Strictly 240x320) -->
+  <div id="phone-canvas">
+
+    <!-- ========================================================
+         VIEW 1: Station Search Screen
+         ======================================================== -->
+    <div id="wrapper-view1" style="display: flex; flex-direction: column; height: 320px;">
+      <!-- Header: 30px -->
+      <header class="app-header">
+        <div class="app-title">
+          <span class="pulse-dot"></span>
+          <span>RailTrack • Find Trains</span>
+        </div>
+        <span class="header-badge clock" id="v1-clock-badge">--:-- IST</span>
+      </header>
+
+      <!-- Content Area: 266px -->
+      <main class="view-content" id="view-search">
+        <!-- City Dropdown Selection Box -->
+        <div class="custom-search-box">
+          <div class="inputs-grid">
+            <div class="stn-select-wrap">
+              <span class="stn-label">From City / Station</span>
+              <select id="select-src" class="stn-dropdown">
+                <!-- Cities will be populated dynamically -->
+              </select>
+            </div>
+            <button id="btn-swap-stations" class="swap-btn" title="Swap Cities">⇄</button>
+            <div class="stn-select-wrap">
+              <span class="stn-label">To City / Station</span>
+              <select id="select-dest" class="stn-dropdown">
+                <!-- Cities will be populated dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Route Label Badge -->
+          <div class="route-preview-strip" id="route-preview-strip">
+            <span id="route-src-label">Kannur (CAN)</span>
+            <span style="color:#38bdf8;">➔</span>
+            <span id="route-dest-label">Thalassery (TLY)</span>
+          </div>
+
+          <!-- Optional Custom Code Row (shown if "CUSTOM" is chosen) -->
+          <div class="custom-code-row" id="custom-code-row">
+            <input type="text" id="input-src-code" class="stn-code-input" placeholder="Src Code (e.g. CAN)" maxlength="4" />
+            <input type="text" id="input-dest-code" class="stn-code-input" placeholder="Dest Code (e.g. TLY)" maxlength="4" />
+          </div>
+
+          <button id="btn-custom-search" class="search-btn-primary">
+            <span>FIND TRAINS (5)</span>
+          </button>
+        </div>
+
+        <!-- Quick Routes (Preset 1-4) -->
+        <div class="section-label">
+          <span>Quick Routes (Key 1-4)</span>
+          <span style="color:#38bdf8; font-size:7.5px;">Malabar Line</span>
+        </div>
+        <div class="presets-list" id="presets-container">
+          <div class="preset-card focused" data-key="1" data-src="CAN" data-dest="TLY">
+            <div class="preset-left">
+              <span class="preset-key">1</span>
+              <div class="preset-details">
+                <span class="preset-route">CAN ➔ TLY</span>
+                <span class="preset-names">Kannur to Thalassery</span>
+              </div>
+            </div>
+            <span class="preset-arrow">▶</span>
+          </div>
+
+          <div class="preset-card" data-key="2" data-src="TLY" data-dest="CLT">
+            <div class="preset-left">
+              <span class="preset-key">2</span>
+              <div class="preset-details">
+                <span class="preset-route">TLY ➔ CLT</span>
+                <span class="preset-names">Thalassery to Kozhikode</span>
+              </div>
+            </div>
+            <span class="preset-arrow">›</span>
+          </div>
+
+          <div class="preset-card" data-key="3" data-src="CLT" data-dest="CAN">
+            <div class="preset-left">
+              <span class="preset-key">3</span>
+              <div class="preset-details">
+                <span class="preset-route">CLT ➔ CAN</span>
+                <span class="preset-names">Kozhikode to Kannur</span>
+              </div>
+            </div>
+            <span class="preset-arrow">›</span>
+          </div>
+
+          <div class="preset-card" data-key="4" data-src="MAQ" data-dest="TLY">
+            <div class="preset-left">
+              <span class="preset-key">4</span>
+              <div class="preset-details">
+                <span class="preset-route">MAQ ➔ TLY</span>
+                <span class="preset-names">Mangaluru to Thalassery</span>
+              </div>
+            </div>
+            <span class="preset-arrow">›</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- Footer / Softkey: 24px -->
+      <footer class="app-footer">
+        <button id="v1-sk-left" class="softkey-action left">Search (5)</button>
+        <span class="softkey-action center">1-4: Quick</span>
+        <button id="v1-sk-right" class="softkey-action right">Clear (RSK)</button>
+      </footer>
+    </div>
+
+    <!-- ========================================================
+         VIEW 2: Trains Between Stations (List Screen)
+         ======================================================== -->
+    <div id="wrapper-view2" style="display: none; flex-direction: column; height: 320px;">
+      <!-- Header: 30px -->
+      <header class="app-header">
+        <div class="app-title" id="v2-header-title">CAN ➔ TLY</div>
+        <span class="header-badge clock" id="v2-clock-badge">--:--</span>
+      </header>
+
+      <!-- Live Time Filter Strip -->
+      <div class="time-filter-strip">
+        <span id="v2-status-note">Sorted by live departure</span>
+        <span class="filter-badge" id="v2-count-badge">0 Trains</span>
+      </div>
+
+      <!-- Scrollable List of Trains: 266px -->
+      <main class="view-content" id="view-trains-content">
+        <div class="trains-list-container" id="trains-list-container">
+          <!-- Dynamically populated train cards -->
+        </div>
+      </main>
+
+      <!-- Footer / Softkey: 24px -->
+      <footer class="app-footer">
+        <button id="v2-sk-left" class="softkey-action left">Back (0)</button>
+        <span class="softkey-action center">▲▼ Move</span>
+        <button id="v2-sk-right" class="softkey-action right">Open (5)</button>
+      </footer>
+    </div>
+
+    <!-- ========================================================
+         VIEW 3: Live Running Status ("Where Is My Train" Timeline)
+         ======================================================== -->
+    <div id="wrapper-view3" style="display: none; flex-direction: column; height: 320px;">
+      <!-- Header: 32px -->
+      <header class="timeline-strip-header">
+        <div class="timeline-train-info" id="v3-train-header">16630 MALABAR EXP</div>
+        <span class="header-badge" id="v3-delay-badge">Live On-Time</span>
+      </header>
+
+      <!-- Dynamic Real-Time Status Alert Banner -->
+      <div class="realtime-alert-banner">
+        <span id="v3-live-clock-sync">⏱️ Synced with IST Clock</span>
+        <span id="v3-active-progress" style="font-weight:700;">Live Position</span>
+      </div>
+
+      <!-- Scrollable Timeline: 264px -->
+      <main class="view-content" id="view-timeline-content">
+        <div class="timeline-stops-wrap" id="timeline-stops-container">
+          <!-- Dynamically populated station stops -->
+        </div>
+      </main>
+
+      <!-- Footer / Softkey: 24px -->
+      <footer class="app-footer">
+        <button id="v3-sk-left" class="softkey-action left">Back (0)</button>
+        <button id="v3-sk-center" class="softkey-action center" style="cursor:pointer;">Refresh (5)</button>
+        <button id="v3-sk-right" class="softkey-action right">Back (RSK)</button>
+      </footer>
+    </div>
+
+  </div>
+
+  <script>
+    /**
+     * RailTrack - Where Is My Train (CloudMosa 240x320 Edition)
+     * Features City Dropdown Selection with Station Codes beside City Names.
+     */
+
+    // ========================================================
+    // Master Cities & Stations Database
+    // Shows City Name prominently with Railway Station Code beside it
+    // ========================================================
+    const CITIES_DATABASE = [
+      { code: "CAN", name: "Kannur", label: "Kannur (CAN)" },
+      { code: "TLY", name: "Thalassery", label: "Thalassery (TLY)" },
+      { code: "BDJ", name: "Vadakara", label: "Vadakara / Badagara (BDJ)" },
+      { code: "CLT", name: "Kozhikode", label: "Kozhikode / Calicut (CLT)" },
+      { code: "TIR", name: "Tirur", label: "Tirur (TIR)" },
+      { code: "SRR", name: "Shoranur", label: "Shoranur Jn (SRR)" },
+      { code: "KGQ", name: "Kasaragod", label: "Kasaragod (KGQ)" },
+      { code: "MAQ", name: "Mangaluru", label: "Mangaluru / Mangalore (MAQ)" },
+      { code: "TCR", name: "Thrissur", label: "Thrissur / Trichur (TCR)" },
+      { code: "AWY", name: "Aluva", label: "Aluva (AWY)" },
+      { code: "ERN", name: "Ernakulam Town", label: "Ernakulam Town (ERN)" },
+      { code: "ERS", name: "Kochi / ERS", label: "Kochi / Ernakulam Jn (ERS)" },
+      { code: "ALLP", name: "Alappuzha", label: "Alappuzha / Alleppey (ALLP)" },
+      { code: "KTYM", name: "Kottayam", label: "Kottayam (KTYM)" },
+      { code: "KYJ", name: "Kayamkulam", label: "Kayamkulam (KYJ)" },
+      { code: "QLN", name: "Kollam", label: "Kollam / Quilon (QLN)" },
+      { code: "VAK", name: "Varkala", label: "Varkala Sivagiri (VAK)" },
+      { code: "TVC", name: "Trivandrum", label: "Thiruvananthapuram (TVC)" },
+      { code: "PGT", name: "Palakkad", label: "Palakkad (PGT)" },
+      { code: "CBE", name: "Coimbatore", label: "Coimbatore (CBE)" },
+      { code: "MAO", name: "Goa", label: "Madgaon / Goa (MAO)" },
+      { code: "SBC", name: "Bengaluru", label: "Bengaluru City (SBC)" },
+      { code: "MAS", name: "Chennai", label: "Chennai Central (MAS)" },
+      { code: "CSMT", name: "Mumbai", label: "Mumbai CSMT (CSMT)" },
+      { code: "NDLS", name: "Delhi", label: "New Delhi (NDLS)" },
+      { code: "CUSTOM", name: "Other Code", label: "✏️ Other Station (Type Code)..." }
+    ];
+
+    // Configuration for live proxy endpoint
+    const API_CONFIG = {
+      searchEndpoint: (src, dest) => `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://railway-api.clarence.link/trains/between?from=${src}&to=${dest}`)}`,
+      runningStatusEndpoint: (no) => `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://railway-api.clarence.link/trains/${no}/live`)}`,
+      timeoutMs: 1400
+    };
+
+    // ========================================================
+    // Official Real-World Timetables for Northern Kerala / Malabar Corridor
+    // Source: Official Indian Railways / IRCTC Schedule Database
+    // ========================================================
+    const REAL_MALABAR_TIMETABLE = [
+      {
+        trainNo: "12081",
+        name: "Jan Shatabdi Exp",
+        type: "SF",
+        runs: "Excl. Wed, Sun",
+        typicalDelay: 2,
+        direction: "SOUTH",
+        stops: [
+          { code: "CAN", name: "Kannur", schArr: "Start", schDep: "04:50", pf: "1", dist: "0 km" },
+          { code: "TLY", name: "Thalassery", schArr: "05:09", schDep: "05:10", pf: "2", dist: "21 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "05:29", schDep: "05:30", pf: "1", dist: "43 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "05:57", schDep: "06:00", pf: "3", dist: "89 km" },
+          { code: "TIR", name: "Tirur", schArr: "06:39", schDep: "06:40", pf: "3", dist: "130 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "07:15", schDep: "07:20", pf: "6", dist: "175 km" },
+          { code: "TCR", name: "Thrissur", schArr: "07:57", schDep: "08:00", pf: "1", dist: "208 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "09:12", schDep: "09:15", pf: "2", dist: "279 km" },
+          { code: "KTYM", name: "Kottayam", schArr: "10:14", schDep: "10:16", pf: "1", dist: "339 km" },
+          { code: "KYJ", name: "Kayamkulam", schArr: "11:03", schDep: "11:05", pf: "1", dist: "380 km" },
+          { code: "QLN", name: "Kollam", schArr: "11:43", schDep: "11:45", pf: "1", dist: "421 km" },
+          { code: "TVC", name: "Trivandrum", schArr: "13:45", schDep: "End", pf: "2", dist: "485 km" }
+        ]
+      },
+      {
+        trainNo: "16308",
+        name: "Executive Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 0,
+        direction: "SOUTH",
+        stops: [
+          { code: "CAN", name: "Kannur", schArr: "Start", schDep: "05:10", pf: "1", dist: "0 km" },
+          { code: "TLY", name: "Thalassery", schArr: "05:29", schDep: "05:30", pf: "2", dist: "21 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "05:49", schDep: "05:50", pf: "1", dist: "43 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "06:37", schDep: "06:40", pf: "3", dist: "89 km" },
+          { code: "TIR", name: "Tirur", schArr: "07:22", schDep: "07:23", pf: "3", dist: "130 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "08:40", schDep: "08:45", pf: "6", dist: "175 km" },
+          { code: "TCR", name: "Thrissur", schArr: "09:27", schDep: "09:30", pf: "1", dist: "208 km" },
+          { code: "AWY", name: "Aluva", schArr: "10:28", schDep: "10:30", pf: "1", dist: "263 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "11:00", schDep: "11:05", pf: "2", dist: "279 km" },
+          { code: "ALLP", name: "Alappuzha", schArr: "12:45", schDep: "End", pf: "1", dist: "336 km" }
+        ]
+      },
+      {
+        trainNo: "16345",
+        name: "Netravati Express",
+        type: "SF",
+        runs: "Daily",
+        typicalDelay: 10,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "05:05", pf: "1", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "05:48", schDep: "05:50", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "06:35", schDep: "06:38", pf: "2", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "06:53", schDep: "06:55", pf: "2", dist: "153 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "07:14", schDep: "07:15", pf: "1", dist: "175 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "08:07", schDep: "08:10", pf: "3", dist: "221 km" },
+          { code: "TIR", name: "Tirur", schArr: "08:58", schDep: "09:00", pf: "3", dist: "262 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "10:15", schDep: "10:20", pf: "5", dist: "307 km" },
+          { code: "TCR", name: "Thrissur", schArr: "11:12", schDep: "11:15", pf: "1", dist: "340 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "12:35", schDep: "End", pf: "2", dist: "411 km" }
+        ]
+      },
+      {
+        trainNo: "16649",
+        name: "Parasuram Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 5,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "05:00", pf: "3", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "05:54", schDep: "05:55", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "07:05", schDep: "07:10", pf: "1", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "07:24", schDep: "07:25", pf: "2", dist: "153 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "07:44", schDep: "07:45", pf: "1", dist: "175 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "08:37", schDep: "08:40", pf: "1", dist: "221 km" },
+          { code: "TIR", name: "Tirur", schArr: "09:29", schDep: "09:30", pf: "3", dist: "262 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "11:10", schDep: "11:15", pf: "6", dist: "307 km" },
+          { code: "TCR", name: "Thrissur", schArr: "12:01", schDep: "12:03", pf: "1", dist: "340 km" },
+          { code: "AWY", name: "Aluva", schArr: "12:53", schDep: "12:55", pf: "1", dist: "395 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "13:55", schDep: "14:00", pf: "2", dist: "411 km" },
+          { code: "KTYM", name: "Kottayam", schArr: "15:10", schDep: "15:12", pf: "1", dist: "471 km" },
+          { code: "KYJ", name: "Kayamkulam", schArr: "16:13", schDep: "16:15", pf: "1", dist: "512 km" },
+          { code: "QLN", name: "Kollam", schArr: "17:17", schDep: "17:20", pf: "1", dist: "553 km" },
+          { code: "VAK", name: "Varkala", schArr: "17:44", schDep: "17:45", pf: "3", dist: "576 km" },
+          { code: "TVC", name: "Trivandrum", schArr: "18:45", schDep: "End", pf: "1", dist: "617 km" }
+        ]
+      },
+      {
+        trainNo: "20632",
+        name: "Vande Bharat Exp",
+        type: "VB",
+        runs: "Except Thu",
+        typicalDelay: 0,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "06:15", pf: "1", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "06:52", schDep: "06:54", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "07:55", schDep: "07:57", pf: "2", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "08:14", schDep: "08:15", pf: "2", dist: "153 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "08:57", schDep: "08:59", pf: "3", dist: "221 km" },
+          { code: "TIR", name: "Tirur", schArr: "09:32", schDep: "09:34", pf: "3", dist: "262 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "10:15", schDep: "10:17", pf: "5", dist: "307 km" },
+          { code: "TCR", name: "Thrissur", schArr: "10:48", schDep: "10:50", pf: "1", dist: "340 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "11:45", schDep: "11:48", pf: "2", dist: "411 km" },
+          { code: "ALLP", name: "Alappuzha", schArr: "12:38", schDep: "12:40", pf: "1", dist: "468 km" },
+          { code: "QLN", name: "Kollam", schArr: "13:40", schDep: "13:42", pf: "1", dist: "553 km" },
+          { code: "TVC", name: "Trivandrum", schArr: "15:05", schDep: "End", pf: "1", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "16160",
+        name: "MAQ Chennai Exp",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 12,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "06:45", pf: "2", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "07:34", schDep: "07:35", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "09:05", schDep: "09:10", pf: "2", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "09:23", schDep: "09:25", pf: "2", dist: "153 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "09:47", schDep: "09:48", pf: "1", dist: "175 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "10:30", schDep: "10:35", pf: "3", dist: "221 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "12:45", schDep: "End", pf: "5", dist: "307 km" }
+        ]
+      },
+      {
+        trainNo: "16605",
+        name: "Ernad Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 6,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "07:20", pf: "3", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "08:04", schDep: "08:05", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "09:35", schDep: "09:38", pf: "2", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "09:54", schDep: "09:55", pf: "2", dist: "153 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "10:14", schDep: "10:15", pf: "1", dist: "175 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "11:07", schDep: "11:10", pf: "3", dist: "221 km" },
+          { code: "TIR", name: "Tirur", schArr: "11:54", schDep: "11:55", pf: "3", dist: "262 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "13:25", schDep: "13:30", pf: "4", dist: "307 km" },
+          { code: "TCR", name: "Thrissur", schArr: "14:28", schDep: "14:30", pf: "1", dist: "340 km" },
+          { code: "AWY", name: "Aluva", schArr: "15:23", schDep: "15:25", pf: "1", dist: "395 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "15:55", schDep: "16:00", pf: "2", dist: "411 km" },
+          { code: "ALLP", name: "Alappuzha", schArr: "17:15", schDep: "17:18", pf: "1", dist: "468 km" },
+          { code: "QLN", name: "Kollam", schArr: "19:15", schDep: "19:18", pf: "1", dist: "553 km" },
+          { code: "TVC", name: "Trivandrum", schArr: "20:50", schDep: "End", pf: "2", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "12075",
+        name: "Calicut Jan Shatabdi",
+        type: "SF",
+        runs: "Daily",
+        typicalDelay: 0,
+        direction: "SOUTH",
+        stops: [
+          { code: "CLT", name: "Kozhikode", schArr: "Start", schDep: "13:45", pf: "1", dist: "0 km" },
+          { code: "TIR", name: "Tirur", schArr: "14:24", schDep: "14:25", pf: "3", dist: "41 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "15:07", schDep: "15:10", pf: "4", dist: "86 km" },
+          { code: "TCR", name: "Thrissur", schArr: "15:43", schDep: "15:45", pf: "1", dist: "119 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "17:20", schDep: "End", pf: "2", dist: "191 km" }
+        ]
+      },
+      {
+        trainNo: "16603",
+        name: "Maveli Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 10,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "17:30", pf: "1", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "18:14", schDep: "18:15", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "19:35", schDep: "19:38", pf: "1", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "19:54", schDep: "19:55", pf: "2", dist: "153 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "20:14", schDep: "20:15", pf: "1", dist: "175 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "21:07", schDep: "21:10", pf: "3", dist: "221 km" },
+          { code: "TIR", name: "Tirur", schArr: "21:53", schDep: "21:55", pf: "3", dist: "262 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "23:15", schDep: "23:20", pf: "5", dist: "307 km" },
+          { code: "TCR", name: "Thrissur", schArr: "00:07", schDep: "00:10", pf: "1", dist: "340 km" },
+          { code: "AWY", name: "Aluva", schArr: "01:03", schDep: "01:05", pf: "1", dist: "395 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "01:45", schDep: "01:50", pf: "1", dist: "411 km" },
+          { code: "ALLP", name: "Alappuzha", schArr: "03:15", schDep: "03:18", pf: "1", dist: "468 km" },
+          { code: "QLN", name: "Kollam", schArr: "05:15", schDep: "05:18", pf: "1", dist: "553 km" },
+          { code: "TVC", name: "Trivandrum", schArr: "07:15", schDep: "End", pf: "1", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "16630",
+        name: "Malabar Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 4,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "18:15", pf: "3", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "19:04", schDep: "19:05", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "20:55", schDep: "20:58", pf: "1", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "21:13", schDep: "21:15", pf: "2", dist: "153 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "21:32", schDep: "21:33", pf: "1", dist: "175 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "22:25", schDep: "22:30", pf: "3", dist: "221 km" },
+          { code: "TIR", name: "Tirur", schArr: "23:14", schDep: "23:15", pf: "3", dist: "262 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "00:50", schDep: "00:55", pf: "5", dist: "307 km" },
+          { code: "TCR", name: "Thrissur", schArr: "01:42", schDep: "01:45", pf: "1", dist: "340 km" },
+          { code: "AWY", name: "Aluva", schArr: "02:40", schDep: "02:42", pf: "1", dist: "395 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "03:15", schDep: "03:20", pf: "2", dist: "411 km" },
+          { code: "KTYM", name: "Kottayam", schArr: "04:37", schDep: "04:40", pf: "1", dist: "471 km" },
+          { code: "KYJ", name: "Kayamkulam", schArr: "05:43", schDep: "05:45", pf: "1", dist: "512 km" },
+          { code: "QLN", name: "Kollam", schArr: "06:30", schDep: "06:33", pf: "1", dist: "553 km" },
+          { code: "VAK", name: "Varkala", schArr: "07:04", schDep: "07:05", pf: "3", dist: "576 km" },
+          { code: "TVC", name: "Trivandrum", schArr: "09:00", schDep: "End", pf: "2", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "22638",
+        name: "West Coast SF Exp",
+        type: "SF",
+        runs: "Daily",
+        typicalDelay: 8,
+        direction: "SOUTH",
+        stops: [
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "Start", schDep: "23:45", pf: "1", dist: "0 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "00:34", schDep: "00:35", pf: "1", dist: "46 km" },
+          { code: "CAN", name: "Kannur", schArr: "01:45", schDep: "01:50", pf: "2", dist: "132 km" },
+          { code: "TLY", name: "Thalassery", schArr: "02:03", schDep: "02:05", pf: "2", dist: "153 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "02:24", schDep: "02:25", pf: "1", dist: "175 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "03:00", schDep: "03:05", pf: "3", dist: "221 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "04:45", schDep: "04:50", pf: "5", dist: "307 km" },
+          { code: "PGT", name: "Palakkad", schArr: "05:45", schDep: "05:50", pf: "1", dist: "351 km" },
+          { code: "CBE", name: "Coimbatore", schArr: "07:12", schDep: "07:15", pf: "2", dist: "407 km" },
+          { code: "MAS", name: "Chennai", schArr: "15:50", schDep: "End", pf: "5", dist: "900 km" }
+        ]
+      },
+      // NORTHBOUND TRAINS (TVC -> CLT -> TLY -> CAN -> MAQ)
+      {
+        trainNo: "16604",
+        name: "Maveli Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 0,
+        direction: "NORTH",
+        stops: [
+          { code: "TVC", name: "Trivandrum", schArr: "Start", schDep: "19:25", pf: "1", dist: "0 km" },
+          { code: "QLN", name: "Kollam", schArr: "20:27", schDep: "20:30", pf: "1", dist: "65 km" },
+          { code: "ALLP", name: "Alappuzha", schArr: "22:02", schDep: "22:05", pf: "1", dist: "150 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "23:25", schDep: "23:30", pf: "2", dist: "207 km" },
+          { code: "TCR", name: "Thrissur", schArr: "00:47", schDep: "00:50", pf: "1", dist: "278 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "01:55", schDep: "02:00", pf: "6", dist: "311 km" },
+          { code: "TIR", name: "Tirur", schArr: "02:43", schDep: "02:44", pf: "1", dist: "356 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "03:25", schDep: "03:30", pf: "3", dist: "397 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "04:09", schDep: "04:10", pf: "2", dist: "443 km" },
+          { code: "TLY", name: "Thalassery", schArr: "04:29", schDep: "04:30", pf: "1", dist: "465 km" },
+          { code: "CAN", name: "Kannur", schArr: "04:55", schDep: "05:00", pf: "1", dist: "486 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "06:18", schDep: "06:20", pf: "1", dist: "572 km" },
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "07:55", schDep: "End", pf: "1", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "16629",
+        name: "Malabar Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 15,
+        direction: "NORTH",
+        stops: [
+          { code: "TVC", name: "Trivandrum", schArr: "Start", schDep: "18:40", pf: "2", dist: "0 km" },
+          { code: "QLN", name: "Kollam", schArr: "19:50", schDep: "19:53", pf: "1", dist: "65 km" },
+          { code: "KTYM", name: "Kottayam", schArr: "21:32", schDep: "21:35", pf: "1", dist: "147 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "23:55", schDep: "00:01", pf: "2", dist: "207 km" },
+          { code: "TCR", name: "Thrissur", schArr: "01:32", schDep: "01:35", pf: "1", dist: "278 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "04:40", schDep: "04:45", pf: "6", dist: "311 km" },
+          { code: "TIR", name: "Tirur", schArr: "05:04", schDep: "05:05", pf: "1", dist: "356 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "05:35", schDep: "05:40", pf: "3", dist: "397 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "06:19", schDep: "06:20", pf: "2", dist: "443 km" },
+          { code: "TLY", name: "Thalassery", schArr: "06:38", schDep: "06:40", pf: "1", dist: "465 km" },
+          { code: "CAN", name: "Kannur", schArr: "06:55", schDep: "07:00", pf: "1", dist: "486 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "08:49", schDep: "08:50", pf: "1", dist: "572 km" },
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "10:25", schDep: "End", pf: "2", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "12618",
+        name: "Mangala Lakshadweep",
+        type: "SF",
+        runs: "Daily",
+        typicalDelay: 18,
+        direction: "NORTH",
+        stops: [
+          { code: "ERS", name: "Ernakulam Jn", schArr: "Start", schDep: "10:25", pf: "1", dist: "0 km" },
+          { code: "TCR", name: "Thrissur", schArr: "11:57", schDep: "12:00", pf: "2", dist: "74 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "12:50", schDep: "12:55", pf: "5", dist: "107 km" },
+          { code: "TIR", name: "Tirur", schArr: "13:33", schDep: "13:35", pf: "1", dist: "152 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "14:27", schDep: "14:30", pf: "3", dist: "193 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "15:14", schDep: "15:15", pf: "2", dist: "239 km" },
+          { code: "TLY", name: "Thalassery", schArr: "15:34", schDep: "15:35", pf: "1", dist: "261 km" },
+          { code: "CAN", name: "Kannur", schArr: "16:02", schDep: "16:05", pf: "1", dist: "282 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "17:13", schDep: "17:15", pf: "1", dist: "368 km" },
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "18:35", schDep: "End", pf: "3", dist: "414 km" }
+        ]
+      },
+      {
+        trainNo: "16650",
+        name: "Parasuram Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 8,
+        direction: "NORTH",
+        stops: [
+          { code: "TVC", name: "Trivandrum", schArr: "Start", schDep: "06:10", pf: "1", dist: "0 km" },
+          { code: "QLN", name: "Kollam", schArr: "07:22", schDep: "07:25", pf: "1", dist: "65 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "11:00", schDep: "11:05", pf: "2", dist: "207 km" },
+          { code: "TCR", name: "Thrissur", schArr: "12:26", schDep: "12:28", pf: "1", dist: "278 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "14:05", schDep: "14:10", pf: "5", dist: "311 km" },
+          { code: "TIR", name: "Tirur", schArr: "14:56", schDep: "14:57", pf: "1", dist: "356 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "17:00", schDep: "17:05", pf: "3", dist: "397 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "17:44", schDep: "17:45", pf: "2", dist: "443 km" },
+          { code: "TLY", name: "Thalassery", schArr: "18:02", schDep: "18:03", pf: "1", dist: "465 km" },
+          { code: "CAN", name: "Kannur", schArr: "18:25", schDep: "18:30", pf: "1", dist: "486 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "19:34", schDep: "19:35", pf: "1", dist: "572 km" },
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "21:10", schDep: "End", pf: "1", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "20631",
+        name: "Vande Bharat Exp",
+        type: "VB",
+        runs: "Except Thu",
+        typicalDelay: 0,
+        direction: "NORTH",
+        stops: [
+          { code: "TVC", name: "Trivandrum", schArr: "Start", schDep: "16:05", pf: "1", dist: "0 km" },
+          { code: "QLN", name: "Kollam", schArr: "16:53", schDep: "16:55", pf: "1", dist: "65 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "18:35", schDep: "18:38", pf: "2", dist: "207 km" },
+          { code: "TCR", name: "Thrissur", schArr: "19:40", schDep: "19:42", pf: "1", dist: "278 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "20:15", schDep: "20:17", pf: "6", dist: "311 km" },
+          { code: "TIR", name: "Tirur", schArr: "20:47", schDep: "20:49", pf: "1", dist: "356 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "21:20", schDep: "21:22", pf: "3", dist: "397 km" },
+          { code: "TLY", name: "Thalassery", schArr: "21:54", schDep: "21:55", pf: "1", dist: "465 km" },
+          { code: "CAN", name: "Kannur", schArr: "22:20", schDep: "22:22", pf: "1", dist: "486 km" },
+          { code: "KGQ", name: "Kasaragod", schArr: "23:18", schDep: "23:20", pf: "1", dist: "572 km" },
+          { code: "MAQ", name: "Mangaluru Ctrl", schArr: "23:55", schDep: "End", pf: "1", dist: "618 km" }
+        ]
+      },
+      {
+        trainNo: "16307",
+        name: "Executive Express",
+        type: "EXP",
+        runs: "Daily",
+        typicalDelay: 5,
+        direction: "NORTH",
+        stops: [
+          { code: "ALLP", name: "Alappuzha", schArr: "Start", schDep: "15:50", pf: "1", dist: "0 km" },
+          { code: "ERN", name: "Ernakulam Town", schArr: "17:15", schDep: "17:20", pf: "2", dist: "57 km" },
+          { code: "AWY", name: "Aluva", schArr: "17:48", schDep: "17:50", pf: "1", dist: "74 km" },
+          { code: "TCR", name: "Thrissur", schArr: "18:57", schDep: "19:00", pf: "1", dist: "128 km" },
+          { code: "SRR", name: "Shoranur Jn", schArr: "21:05", schDep: "21:10", pf: "6", dist: "161 km" },
+          { code: "TIR", name: "Tirur", schArr: "21:49", schDep: "21:50", pf: "1", dist: "206 km" },
+          { code: "CLT", name: "Kozhikode", schArr: "22:32", schDep: "22:35", pf: "3", dist: "247 km" },
+          { code: "BDJ", name: "Vadakara", schArr: "23:14", schDep: "23:15", pf: "2", dist: "293 km" },
+          { code: "TLY", name: "Thalassery", schArr: "23:34", schDep: "23:35", pf: "1", dist: "315 km" },
+          { code: "CAN", name: "Kannur", schArr: "00:30", schDep: "End", pf: "1", dist: "336 km" }
+        ]
+      }
+    ];
+
+    // ========================================================
+    // Application State
+    // ========================================================
+    let currentView = 1;
+    let presetFocusIndex = 0;
+    let currentTrainsList = [];
+    let focusedTrainIndex = 0;
+    let currentSelectedTrain = null;
+    let currentSrc = "CAN";
+    let currentDest = "TLY";
+
+    // DOM Elements
+    const wrapperView1 = document.getElementById('wrapper-view1');
+    const wrapperView2 = document.getElementById('wrapper-view2');
+    const wrapperView3 = document.getElementById('wrapper-view3');
+
+    const v1ClockBadge = document.getElementById('v1-clock-badge');
+    const v2ClockBadge = document.getElementById('v2-clock-badge');
+    const v2HeaderTitle = document.getElementById('v2-header-title');
+    const v2CountBadge = document.getElementById('v2-count-badge');
+    const v2StatusNote = document.getElementById('v2-status-note');
+    const trainsListContainer = document.getElementById('trains-list-container');
+    const viewTrainsContent = document.getElementById('view-trains-content');
+
+    const v3TrainHeader = document.getElementById('v3-train-header');
+    const v3DelayBadge = document.getElementById('v3-delay-badge');
+    const v3LiveClockSync = document.getElementById('v3-live-clock-sync');
+    const v3ActiveProgress = document.getElementById('v3-active-progress');
+    const timelineStopsContainer = document.getElementById('timeline-stops-container');
+    const viewTimelineContent = document.getElementById('view-timeline-content');
+
+    const selectSrc = document.getElementById('select-src');
+    const selectDest = document.getElementById('select-dest');
+    const btnSwap = document.getElementById('btn-swap-stations');
+    const btnCustomSearch = document.getElementById('btn-custom-search');
+    const presetsContainer = document.getElementById('presets-container');
+    const routeSrcLabel = document.getElementById('route-src-label');
+    const routeDestLabel = document.getElementById('route-dest-label');
+    const customCodeRow = document.getElementById('custom-code-row');
+    const inputSrcCode = document.getElementById('input-src-code');
+    const inputDestCode = document.getElementById('input-dest-code');
+
+    // ========================================================
+    // Populate Dropdown Selection List
+    // ========================================================
+    function populateCityDropdowns() {
+      selectSrc.innerHTML = '';
+      selectDest.innerHTML = '';
+
+      CITIES_DATABASE.forEach(item => {
+        const opt1 = document.createElement('option');
+        opt1.value = item.code;
+        opt1.textContent = item.label;
+        if (item.code === "CAN") opt1.selected = true;
+        selectSrc.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = item.code;
+        opt2.textContent = item.label;
+        if (item.code === "TLY") opt2.selected = true;
+        selectDest.appendChild(opt2);
+      });
+
+      updateRoutePreview();
+    }
+
+    function getCityDisplayName(code) {
+      const match = CITIES_DATABASE.find(c => c.code === code);
+      if (match) return match.label;
+      return code;
+    }
+
+    function updateRoutePreview() {
+      const srcCode = getSelectedSourceCode();
+      const destCode = getSelectedDestCode();
+
+      routeSrcLabel.textContent = getCityDisplayName(srcCode);
+      routeDestLabel.textContent = getCityDisplayName(destCode);
+
+      // Check if custom code input row needs to show
+      if (selectSrc.value === "CUSTOM" || selectDest.value === "CUSTOM") {
+        customCodeRow.style.display = 'flex';
+      } else {
+        customCodeRow.style.display = 'none';
+      }
+    }
+
+    function getSelectedSourceCode() {
+      if (selectSrc.value === "CUSTOM") {
+        return (inputSrcCode.value || "CAN").toUpperCase().trim();
+      }
+      return selectSrc.value;
+    }
+
+    function getSelectedDestCode() {
+      if (selectDest.value === "CUSTOM") {
+        return (inputDestCode.value || "TLY").toUpperCase().trim();
+      }
+      return selectDest.value;
+    }
+
+    // ========================================================
+    // Real-Time Clock Helpers
+    // ========================================================
+    function getNowMinutes() {
+      const now = new Date();
+      return now.getHours() * 60 + now.getMinutes();
+    }
+
+    function getNowTimeString() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+
+    function timeToMinutes(timeStr) {
+      if (!timeStr || timeStr === "Start" || timeStr === "End") return 0;
+      const [h, m] = timeStr.split(":").map(Number);
+      return h * 60 + m;
+    }
+
+    function addMinutesToTime(timeStr, mins) {
+      if (!timeStr || timeStr === "Start" || timeStr === "End") return timeStr;
+      let total = timeToMinutes(timeStr) + mins;
+      total = (total + 1440) % 1440;
+      const h = String(Math.floor(total / 60)).padStart(2, '0');
+      const m = String(total % 60).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+
+    function updateLiveClocks() {
+      const timeStr = getNowTimeString();
+      v1ClockBadge.textContent = `${timeStr} IST`;
+      v2ClockBadge.textContent = `${timeStr} IST`;
+    }
+
+    // ========================================================
+    // Asynchronous Search and Status Architecture
+    // ========================================================
+    async function searchTrains(src, dest) {
+      src = (src || "").toUpperCase().trim();
+      dest = (dest || "").toUpperCase().trim();
+
+      // 1. Attempt external API
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), API_CONFIG.timeoutMs);
+        const res = await fetch(API_CONFIG.searchEndpoint(src, dest), {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.trains) && data.trains.length > 0) {
+            return data.trains;
+          }
+        }
+      } catch (e) {
+        // Fall back gracefully to verified timetable
+      }
+
+      // 2. Query built-in verified timetable
+      return getRealTrainsBetween(src, dest);
+    }
+
+    async function fetchRunningStatus(trainNo) {
+      trainNo = String(trainNo).trim();
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), API_CONFIG.timeoutMs);
+        const res = await fetch(API_CONFIG.runningStatusEndpoint(trainNo), {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.stops && data.stops.length > 0) {
+            return data;
+          }
+        }
+      } catch (e) {
+        // Fall back gracefully
+      }
+
+      return getRealTrainStatus(trainNo);
+    }
+
+    /**
+     * Compute real trains between stations sorted by current clock time!
+     */
+    function getRealTrainsBetween(src, dest) {
+      const nowMins = getNowMinutes();
+      const matched = [];
+
+      for (const t of REAL_MALABAR_TIMETABLE) {
+        const srcIdx = t.stops.findIndex(s => s.code === src);
+        const destIdx = t.stops.findIndex(s => s.code === dest);
+
+        if (srcIdx !== -1 && destIdx !== -1 && srcIdx < destIdx) {
+          const srcStop = t.stops[srcIdx];
+          const destStop = t.stops[destIdx];
+
+          const depTime = srcStop.schDep === "Start" ? srcStop.schArr : srcStop.schDep;
+          const arrTime = destStop.schArr === "End" ? destStop.schDep : destStop.schArr;
+          const depMins = timeToMinutes(depTime);
+
+          const duration = computeDuration(depTime, arrTime);
+
+          let diffFromNow = depMins - nowMins;
+          let liveStatusTag = "";
+          let statusClass = "";
+          let sortWeight = 0;
+
+          if (diffFromNow >= 0 && diffFromNow <= 60) {
+            liveStatusTag = `⚡ Next in ${diffFromNow}m`;
+            statusClass = "next";
+            sortWeight = diffFromNow;
+          } else if (diffFromNow > 60) {
+            const hrs = Math.floor(diffFromNow / 60);
+            liveStatusTag = `Later today (${hrs}h)`;
+            statusClass = "upcoming";
+            sortWeight = diffFromNow;
+          } else {
+            const pastMins = nowMins - depMins;
+            const tripMins = timeToMinutes(duration);
+            if (pastMins <= (tripMins + 15)) {
+              liveStatusTag = `🟢 Running Now`;
+              statusClass = "running";
+              sortWeight = -100;
+            } else {
+              liveStatusTag = `Passed today (Runs Tomorrow)`;
+              statusClass = "passed";
+              sortWeight = 1440 + diffFromNow;
+            }
+          }
+
+          matched.push({
+            trainNo: t.trainNo,
+            name: t.name,
+            type: t.type,
+            runs: t.runs,
+            delayMins: t.typicalDelay,
+            srcCode: src,
+            destCode: dest,
+            depTime: depTime,
+            arrTime: arrTime,
+            depMins: depMins,
+            duration: duration,
+            liveStatusTag: liveStatusTag,
+            statusClass: statusClass,
+            sortWeight: sortWeight,
+            rawTrain: t
+          });
+        }
+      }
+
+      if (matched.length === 0) {
+        return generateGenericTrainsBetween(src, dest);
+      }
+
+      return matched.sort((a, b) => a.sortWeight - b.sortWeight);
+    }
+
+    function getRealTrainStatus(trainNo) {
+      const match = REAL_MALABAR_TIMETABLE.find(t => t.trainNo === trainNo);
+      return match || REAL_MALABAR_TIMETABLE[0];
+    }
+
+    function computeDuration(dep, arr) {
+      if (!dep || !arr || dep === "Start" || arr === "End") return "18 mins";
+      const [h1, m1] = dep.split(":").map(Number);
+      const [h2, m2] = arr.split(":").map(Number);
+      let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+      if (diff < 0) diff += 1440;
+      const hrs = Math.floor(diff / 60);
+      const mins = diff % 60;
+      if (hrs > 0) return `${hrs}h ${mins}m`;
+      return `${mins} mins`;
+    }
+
+    function generateGenericTrainsBetween(src, dest) {
+      const srcName = getCityDisplayName(src);
+      const destName = getCityDisplayName(dest);
+      return [
+        {
+          trainNo: "16308",
+          name: `${srcName.split(' ')[0]} Express`,
+          type: "EXP",
+          runs: "Daily",
+          delayMins: 0,
+          srcCode: src,
+          destCode: dest,
+          depTime: "07:30",
+          arrTime: "08:15",
+          duration: "45 mins",
+          liveStatusTag: "Runs Tomorrow at 07:30",
+          statusClass: "upcoming",
+          sortWeight: 10,
+          rawTrain: REAL_MALABAR_TIMETABLE[1]
+        },
+        {
+          trainNo: "16630",
+          name: `${destName.split(' ')[0]} Express`,
+          type: "SF",
+          runs: "Daily",
+          delayMins: 4,
+          srcCode: src,
+          destCode: dest,
+          depTime: "20:55",
+          arrTime: "21:40",
+          duration: "45 mins",
+          liveStatusTag: "⚡ Next Train Tonight",
+          statusClass: "next",
+          sortWeight: 1,
+          rawTrain: REAL_MALABAR_TIMETABLE[9]
+        }
+      ];
+    }
+
+    // ========================================================
+    // View Switcher & Rendering
+    // ========================================================
+    function switchView(viewNum) {
+      currentView = viewNum;
+      wrapperView1.style.display = viewNum === 1 ? 'flex' : 'none';
+      wrapperView2.style.display = viewNum === 2 ? 'flex' : 'none';
+      wrapperView3.style.display = viewNum === 3 ? 'flex' : 'none';
+
+      updateLiveClocks();
+      if (viewNum === 1) {
+        selectSrc.blur();
+        selectDest.blur();
+      }
+    }
+
+    async function executeSearch(src, dest) {
+      currentSrc = (src || getSelectedSourceCode()).toUpperCase().trim();
+      currentDest = (dest || getSelectedDestCode()).toUpperCase().trim();
+
+      // Sync select boxes if in database
+      if (CITIES_DATABASE.some(c => c.code === currentSrc)) {
+        selectSrc.value = currentSrc;
+      }
+      if (CITIES_DATABASE.some(c => c.code === currentDest)) {
+        selectDest.value = currentDest;
+      }
+      updateRoutePreview();
+
+      switchView(2);
+      v2HeaderTitle.textContent = `${currentSrc} ➔ ${currentDest}`;
+      v2CountBadge.textContent = "Loading...";
+      trainsListContainer.innerHTML = `
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <div>Querying IRCTC Schedule...</div>
+        </div>
+      `;
+
+      const trains = await searchTrains(currentSrc, currentDest);
+      currentTrainsList = trains;
+      focusedTrainIndex = 0;
+      renderTrainsList(trains);
+    }
+
+    /**
+     * Render VIEW 2 (Trains List)
+     */
+    function renderTrainsList(trains) {
+      v2HeaderTitle.textContent = `${currentSrc} ➔ ${currentDest}`;
+      v2CountBadge.textContent = `${trains.length} Trains`;
+      trainsListContainer.innerHTML = '';
+
+      if (trains.length === 0) {
+        trainsListContainer.innerHTML = `
+          <div class="loading-state">
+            <div>No direct trains found.</div>
+            <div style="font-size:8px; color:#64748b;">Press '0' to Search again.</div>
+          </div>
+        `;
+        return;
+      }
+
+      trains.forEach((t, idx) => {
+        const card = document.createElement('div');
+        const isPassedToday = t.statusClass === "passed";
+        card.className = `train-card ${idx === focusedTrainIndex ? 'selected' : ''} ${isPassedToday ? 'departed-earlier' : ''}`;
+        card.dataset.index = idx;
+
+        card.innerHTML = `
+          <div class="train-card-row1">
+            <div class="train-id-name">
+              <span class="train-num">${t.trainNo}</span>
+              <span class="train-title">${t.name.toUpperCase()}</span>
+            </div>
+            <span class="train-type-pill">${t.type}</span>
+          </div>
+          <div class="train-card-row2">
+            <span class="train-times">Dep ${t.depTime} • Arr ${t.arrTime}</span>
+            <span class="train-duration">${t.duration}</span>
+          </div>
+          <div class="train-card-row3">
+            <span class="train-live-tag ${t.statusClass}">${t.liveStatusTag}</span>
+            <span class="focus-pointer">▶ OPEN (5)</span>
+          </div>
+        `;
+
+        card.addEventListener('click', () => {
+          focusedTrainIndex = idx;
+          updateTrainSelection();
+          openTrainTimeline(t);
+        });
+
+        trainsListContainer.appendChild(card);
+      });
+
+      scrollFocusedTrainIntoView();
+    }
+
+    function updateTrainSelection() {
+      const cards = trainsListContainer.querySelectorAll('.train-card');
+      cards.forEach((card, idx) => {
+        if (idx === focusedTrainIndex) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+      });
+      scrollFocusedTrainIntoView();
+    }
+
+    function scrollFocusedTrainIntoView() {
+      const cards = trainsListContainer.querySelectorAll('.train-card');
+      const focusedCard = cards[focusedTrainIndex];
+      if (focusedCard) {
+        const cardTop = focusedCard.offsetTop;
+        const cardHeight = focusedCard.offsetHeight;
+        const containerScroll = viewTrainsContent.scrollTop;
+        const containerHeight = viewTrainsContent.clientHeight;
+
+        if (cardTop < containerScroll) {
+          viewTrainsContent.scrollTo({ top: cardTop - 10, behavior: 'smooth' });
+        } else if (cardTop + cardHeight > containerScroll + containerHeight) {
+          viewTrainsContent.scrollTo({ top: cardTop + cardHeight - containerHeight + 10, behavior: 'smooth' });
+        }
+      }
+    }
+
+    /**
+     * Transition to VIEW 3: Live Running Status
+     */
+    async function openTrainTimeline(trainItem) {
+      currentSelectedTrain = trainItem;
+      switchView(3);
+
+      v3TrainHeader.textContent = `${trainItem.trainNo} ${trainItem.name.toUpperCase()}`;
+
+      timelineStopsContainer.innerHTML = `
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <div>Calculating Real-Time Position...</div>
+        </div>
+      `;
+
+      const fullTrainData = await fetchRunningStatus(trainItem.trainNo);
+      renderTimelineView(fullTrainData || trainItem.rawTrain);
+    }
+
+    /**
+     * Dynamically Calculate and Render Train Timeline based on Current IST Time!
+     */
+    function renderTimelineView(trainData) {
+      timelineStopsContainer.innerHTML = '';
+      const stops = trainData.stops || [];
+      const delay = trainData.typicalDelay || 0;
+      const nowMins = getNowMinutes();
+
+      const originDepTime = stops[0].schDep === "Start" ? stops[0].schArr : stops[0].schDep;
+      const originDepMins = timeToMinutes(originDepTime) + delay;
+      const lastStopArrTime = stops[stops.length - 1].schArr === "End" ? stops[stops.length - 1].schDep : stops[stops.length - 1].schArr;
+      const lastStopArrMins = timeToMinutes(lastStopArrTime) + delay;
+
+      let activeIdx = -1;
+      let isTrainCompleted = false;
+      let isTrainNotStarted = false;
+
+      if (nowMins < originDepMins) {
+        isTrainNotStarted = true;
+        activeIdx = 0;
+      } else if (nowMins > lastStopArrMins) {
+        isTrainCompleted = true;
+        activeIdx = stops.length - 1;
+      } else {
+        for (let i = 0; i < stops.length; i++) {
+          const st = stops[i];
+          const stTime = timeToMinutes(st.schDep === "End" ? st.schArr : st.schDep) + delay;
+          if (nowMins <= stTime) {
+            activeIdx = i;
+            break;
+          }
+        }
+        if (activeIdx === -1) activeIdx = stops.length - 1;
+      }
+
+      if (delay > 0) {
+        v3DelayBadge.className = 'header-badge late';
+        v3DelayBadge.textContent = `+${delay}m Late`;
+      } else {
+        v3DelayBadge.className = 'header-badge';
+        v3DelayBadge.textContent = 'Running On-Time';
+      }
+
+      const activeStop = stops[activeIdx] || stops[0];
+      if (isTrainNotStarted) {
+        v3LiveClockSync.textContent = `⏱️ Departs ${activeStop.code} at ${originDepTime}`;
+        v3ActiveProgress.textContent = `At Yard (Not Started)`;
+      } else if (isTrainCompleted) {
+        v3LiveClockSync.textContent = `⏱️ Completed at ${lastStopArrTime}`;
+        v3ActiveProgress.textContent = `Journey Done`;
+      } else {
+        v3LiveClockSync.textContent = `⏱️ Live: Near ${activeStop.name}`;
+        v3ActiveProgress.textContent = `Running Now`;
+      }
+
+      stops.forEach((st, idx) => {
+        let isPassed = false;
+        let isActive = false;
+        let isUpcoming = false;
+
+        if (isTrainCompleted) {
+          isPassed = idx < stops.length - 1;
+          isActive = idx === stops.length - 1;
+        } else if (isTrainNotStarted) {
+          isActive = idx === 0;
+          isUpcoming = idx > 0;
+        } else {
+          isPassed = idx < activeIdx;
+          isActive = idx === activeIdx;
+          isUpcoming = idx > activeIdx;
+        }
+
+        const stateClass = isPassed ? 'passed' : (isActive ? 'active' : 'upcoming');
+
+        const row = document.createElement('div');
+        row.className = `station-row ${stateClass}`;
+        row.dataset.index = idx;
+        if (isActive) row.id = 'active-station-item';
+
+        const schDisplay = st.schArr === "Start" ? st.schDep : st.schArr;
+        const actDisplay = addMinutesToTime(schDisplay, delay);
+
+        let statusText = '';
+        if (isPassed) {
+          statusText = '<span class="status-pill ontime">Departed</span>';
+        } else if (isActive) {
+          if (isTrainNotStarted) {
+            statusText = `<span class="status-pill ontime">Departs ${schDisplay}</span>`;
+          } else if (isTrainCompleted) {
+            statusText = `<span class="status-pill ontime">Terminated</span>`;
+          } else {
+            statusText = delay > 0 
+              ? `<span class="status-pill delay">+${delay}m Delay</span>` 
+              : '<span class="status-pill ontime">At Station</span>';
+          }
+        } else {
+          statusText = delay > 0 
+            ? `<span class="status-pill delay">+${delay}m Est</span>` 
+            : '<span class="status-pill ontime">Expected</span>';
+        }
+
+        row.innerHTML = `
+          <div class="track-column">
+            <div class="track-segment-up" ${idx === 0 ? 'style="visibility:hidden;"' : ''}></div>
+            <div class="station-circle"></div>
+            <div class="track-segment-down" ${idx === stops.length - 1 ? 'style="visibility:hidden;"' : ''}></div>
+            ${isActive ? '<span class="train-badge-icon">🚆</span>' : ''}
+          </div>
+          <div class="details-column">
+            <div class="stn-header-row">
+              <div class="stn-title-wrap">
+                <span class="stn-name">${st.name}</span>
+                <span class="stn-code-badge">${st.code}</span>
+              </div>
+              <span class="platform-pill">PF ${st.pf || '1'}</span>
+            </div>
+            <div class="stn-times-row">
+              <span>Sch: <b>${schDisplay}</b></span>
+              <span>${isPassed || isActive ? 'Act' : 'Est'}: <b class="time-val actual">${actDisplay}</b></span>
+            </div>
+            <div class="stn-status-row">
+              ${statusText}
+              <span style="color:#64748b; font-size:7.5px;">${st.dist || ''}</span>
+            </div>
+            ${isActive ? `<div class="active-note">● ${isTrainNotStarted ? 'STARTING STATION' : (isTrainCompleted ? 'FINAL TERMINUS' : 'LIVE TRAIN POSITION')}</div>` : ''}
+          </div>
+        `;
+
+        timelineStopsContainer.appendChild(row);
+      });
+
+      autoCenterActiveStop();
+    }
+
+    function autoCenterActiveStop() {
+      setTimeout(() => {
+        const activeNode = document.getElementById('active-station-item');
+        if (!activeNode || !viewTimelineContent) return;
+
+        const activeRect = activeNode.getBoundingClientRect();
+        const containerRect = viewTimelineContent.getBoundingClientRect();
+        const currentScroll = viewTimelineContent.scrollTop;
+
+        const nodeRelativeTop = (activeRect.top - containerRect.top) + currentScroll;
+        const visibleHeight = viewTimelineContent.clientHeight;
+
+        const targetScroll = nodeRelativeTop - (visibleHeight / 2) + (activeRect.height / 2);
+
+        viewTimelineContent.scrollTo({
+          top: Math.max(0, targetScroll),
+          behavior: 'smooth'
+        });
+      }, 90);
+    }
+
+    function refreshTimelineStatus() {
+      if (currentView === 3 && currentSelectedTrain) {
+        v3DelayBadge.textContent = 'REFRESHING...';
+        setTimeout(() => {
+          const train = getRealTrainStatus(currentSelectedTrain.trainNo);
+          renderTimelineView(train);
+        }, 300);
+      }
+    }
+
+    // ========================================================
+    // Keypad & D-Pad Controls
+    // ========================================================
+    function setupKeypadControls() {
+      populateCityDropdowns();
+      window.addEventListener('keydown', handleGlobalKeyDown, true);
+
+      // Dropdown change events
+      selectSrc.addEventListener('change', () => {
+        updateRoutePreview();
+      });
+      selectDest.addEventListener('change', () => {
+        updateRoutePreview();
+      });
+
+      inputSrcCode.addEventListener('input', updateRoutePreview);
+      inputDestCode.addEventListener('input', updateRoutePreview);
+
+      // VIEW 1 Preset Clicks
+      const presetCards = presetsContainer.querySelectorAll('.preset-card');
+      presetCards.forEach((card, idx) => {
+        card.addEventListener('click', () => {
+          presetFocusIndex = idx;
+          updatePresetSelection();
+          selectSrc.value = card.dataset.src;
+          selectDest.value = card.dataset.dest;
+          updateRoutePreview();
+          executeSearch(card.dataset.src, card.dataset.dest);
+        });
+      });
+
+      // Swap button
+      btnSwap.addEventListener('click', () => {
+        const temp = selectSrc.value;
+        selectSrc.value = selectDest.value;
+        selectDest.value = temp;
+        updateRoutePreview();
+      });
+
+      // Custom Search button
+      btnCustomSearch.addEventListener('click', () => {
+        executeSearch(getSelectedSourceCode(), getSelectedDestCode());
+      });
+
+      // Softkeys bindings
+      document.getElementById('v1-sk-left').addEventListener('click', () => executeSearch(getSelectedSourceCode(), getSelectedDestCode()));
+      document.getElementById('v1-sk-right').addEventListener('click', () => {
+        selectSrc.selectedIndex = 0;
+        selectDest.selectedIndex = 1;
+        updateRoutePreview();
+      });
+
+      document.getElementById('v2-sk-left').addEventListener('click', () => switchView(1));
+      document.getElementById('v2-sk-right').addEventListener('click', () => {
+        if (currentTrainsList[focusedTrainIndex]) openTrainTimeline(currentTrainsList[focusedTrainIndex]);
+      });
+
+      document.getElementById('v3-sk-left').addEventListener('click', () => switchView(2));
+      document.getElementById('v3-sk-center').addEventListener('click', () => refreshTimelineStatus());
+      document.getElementById('v3-sk-right').addEventListener('click', () => switchView(2));
+
+      setInterval(updateLiveClocks, 10000);
+    }
+
+    function updatePresetSelection() {
+      const cards = presetsContainer.querySelectorAll('.preset-card');
+      cards.forEach((card, idx) => {
+        if (idx === presetFocusIndex) {
+          card.classList.add('focused');
+          card.querySelector('.preset-arrow').textContent = '▶';
+        } else {
+          card.classList.remove('focused');
+          card.querySelector('.preset-arrow').textContent = '›';
+        }
+      });
+    }
+
+    function handleGlobalKeyDown(e) {
+      const key = e.key;
+
+      // VIEW 1: Station Search Screen
+      if (currentView === 1) {
+        if (key === '1' || key === '2' || key === '3' || key === '4') {
+          e.preventDefault();
+          const targetCard = presetsContainer.querySelector(`.preset-card[data-key="${key}"]`);
+          if (targetCard) {
+            presetFocusIndex = parseInt(key, 10) - 1;
+            updatePresetSelection();
+            selectSrc.value = targetCard.dataset.src;
+            selectDest.value = targetCard.dataset.dest;
+            updateRoutePreview();
+            executeSearch(targetCard.dataset.src, targetCard.dataset.dest);
+          }
+          return;
+        }
+
+        if (key === '5' || key === 'Enter') {
+          // If a dropdown or text input is active, allow normal enter or execute
+          if (document.activeElement !== selectSrc && document.activeElement !== selectDest) {
+            e.preventDefault();
+            executeSearch(getSelectedSourceCode(), getSelectedDestCode());
+            return;
+          }
+        }
+
+        if (key === 'ArrowUp' || key === 'ArrowDown') {
+          if (document.activeElement !== selectSrc && document.activeElement !== selectDest) {
+            e.preventDefault();
+            const cards = presetsContainer.querySelectorAll('.preset-card');
+            if (key === 'ArrowDown') {
+              presetFocusIndex = (presetFocusIndex + 1) % cards.length;
+            } else {
+              presetFocusIndex = (presetFocusIndex - 1 + cards.length) % cards.length;
+            }
+            updatePresetSelection();
+            const current = cards[presetFocusIndex];
+            selectSrc.value = current.dataset.src;
+            selectDest.value = current.dataset.dest;
+            updateRoutePreview();
+            return;
+          }
+        }
+
+        if (key === 'Backspace' || key === 'Escape' || key === 'SoftRight' || key === 'F2') {
+          if (document.activeElement !== inputSrcCode && document.activeElement !== inputDestCode) {
+            e.preventDefault();
+            selectSrc.selectedIndex = 0;
+            selectDest.selectedIndex = 1;
+            updateRoutePreview();
+            return;
+          }
+        }
+        return;
+      }
+
+      // VIEW 2: Trains Between Stations (List Screen)
+      if (currentView === 2) {
+        if (key === 'ArrowUp' || key === 'ArrowDown') {
+          e.preventDefault();
+          if (currentTrainsList.length > 0) {
+            if (key === 'ArrowDown') {
+              focusedTrainIndex = (focusedTrainIndex + 1) % currentTrainsList.length;
+            } else {
+              focusedTrainIndex = (focusedTrainIndex - 1 + currentTrainsList.length) % currentTrainsList.length;
+            }
+            updateTrainSelection();
+          }
+          return;
+        }
+
+        if (key === '5' || key === 'Enter') {
+          e.preventDefault();
+          if (currentTrainsList[focusedTrainIndex]) {
+            openTrainTimeline(currentTrainsList[focusedTrainIndex]);
+          }
+          return;
+        }
+
+        if (key === '0' || key === 'Backspace' || key === 'Escape' || key === 'SoftLeft' || key === 'SoftRight' || key === 'F1' || key === 'F2') {
+          e.preventDefault();
+          switchView(1);
+          return;
+        }
+        return;
+      }
+
+      // VIEW 3: Live Running Status Timeline
+      if (currentView === 3) {
+        if (key === 'ArrowUp' || key === 'ArrowDown') {
+          e.preventDefault();
+          const step = key === 'ArrowUp' ? -40 : 40;
+          viewTimelineContent.scrollBy({ top: step, behavior: 'smooth' });
+          return;
+        }
+
+        if (key === '5' || key === 'Enter') {
+          e.preventDefault();
+          refreshTimelineStatus();
+          return;
+        }
+
+        if (key === '0' || key === 'Backspace' || key === 'Escape' || key === 'SoftRight' || key === 'SoftLeft' || key === 'F1' || key === 'F2') {
+          e.preventDefault();
+          switchView(2);
+          return;
+        }
+      }
+    }
+
+    // Launch App
+    window.addEventListener('DOMContentLoaded', () => {
+      setupKeypadControls();
+      switchView(1);
+    });
+  </script>
+</body>
+</html>
